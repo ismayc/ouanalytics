@@ -1,0 +1,14 @@
+# Built or local only
+r/docs/
+*.Rcheck/
+*.tar.gz
+.Rproj.user/
+.Rhistory
+.RData
+check-export/
+python/.venv/
+__pycache__/
+.pytest_cache/
+.coverage
+branding/.cache/
+.DS_Store
