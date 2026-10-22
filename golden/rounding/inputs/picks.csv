@@ -1,0 +1,5 @@
+"team","player","wage","choice"
+"Tie Team A","P1",15,"UNDER"
+"Tie Team B","P1",14,"OVER"
+"Tie Team A","P2",13,"OVER"
+"Tie Team B","P2",12,"UNDER"

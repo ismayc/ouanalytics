@@ -8,7 +8,7 @@ from ouanalytics_py.cli import main
 from ouanalytics_py.compare import compare_case
 from ouanalytics_py.validate import validate_case
 
-from conftest import ALL_CASES, GOLDEN
+from conftest import ALL_CASES, GOLDEN, POOL_CASES, SEEDING_CASES
 
 
 @pytest.mark.parametrize("case", ALL_CASES)
@@ -30,4 +30,5 @@ def test_cli_all_cases_exit_zero(capsys):
     out = capsys.readouterr().out
     assert "FAIL" not in out
     assert out.strip().endswith("all cases match")
-    assert out.count(": ok") == 2 * (11 + 5) + 6 * (1 + 4)
+    # a pool case prints 11 tables and 5 validations; a seeding case 1 and 4
+    assert out.count(": ok") == len(POOL_CASES) * (11 + 5) + len(SEEDING_CASES) * (1 + 4)

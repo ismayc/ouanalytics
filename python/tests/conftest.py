@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 GOLDEN = Path(__file__).resolve().parents[2] / "golden"  # <repo>/golden, shared with R
-POOL_CASES = ["oct21", "fixture"]
+POOL_CASES = ["oct21", "fixture", "rounding"]
 SEEDING_CASES = [f"seeding_{i}" for i in range(1, 7)]
 ALL_CASES = POOL_CASES + SEEDING_CASES
 

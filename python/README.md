@@ -56,16 +56,28 @@ count, numbers equal within 1e-9 (relative and absolute), NA equal to NA, and
 exact equality for everything else. Seeding rows must match in order. Pool
 tables are compared after sorting both sides by every column.
 
-## Two polars behaviors this code works around
+## Rounding and division: what is guarded, and what is not
 
 - `round()`: R 4.x rounds to the nearer of the two 2-decimal neighbors and
   breaks exact ties to even (`round(3.125, 2)` is 3.12). `standings.r_round`
-  reproduces this and matched R bit for bit on 178,976 values (October 22,
-  2026, R 4.6.1). Polars' own `round` differed on 374 of them.
+  reproduces this and matched R bit for bit on 178,976 test values (October 22,
+  2026, R 4.6.1). Polars' own `round` differed from R on 374 of those test
+  values, but **not on any value this pipeline produces**: polars 2.0 `round(2)`
+  gives R's result for all 3,485 possible win-loss records and all 13,530
+  wins-needed ratios. `r_round` is kept as exactness insurance.
 - Division by a scalar: polars 2.0 computes `col / 100` as `col * 0.01`, so
-  `1429 / 100` gives 14.290000000000001 where R gives 14.29.
-  `standings._fdiv` divides by a column instead, which is exact.
+  `1429 / 100` gives 14.290000000000001 where R gives 14.29. `standings._fdiv`
+  divides by a column instead, which is exact. It changed the value on 1,058
+  of the 10,001 possible lines, and `ceiling(line / 100 * 82)` on none of them.
 
-The golden tables do not catch either of these on their own: a one-bit
-error is inside the 1e-9 tolerance, and the cases hold no exact rounding
-ties. The `r_round` tests in `tests/test_standings.py` catch both.
+A one-bit difference is inside the 1e-9 comparison tolerance, so the golden
+comparison cannot see it, and the unit tests in `tests/test_standings.py` guard
+both helpers directly.
+
+The `rounding` golden case (`../golden/rounding/`) guards a different mistake:
+**half-up rounding**, as a spreadsheet or Python's `Decimal` does by default. 1
+win in 32 games is exactly 3.125 percent; R rounds it to 3.12 and half-up gives
+3.13. With a line of 3.13, R calls the team UNDER and half-up calls it PUSH, a
+difference of kind, not of a bit. A half-up `r_round` passes the October 21,
+fixture, and seeding cases and fails this one on 7 tables (checked October 22,
+2026). It does not catch polars' own `round`, which already agrees with R here.
