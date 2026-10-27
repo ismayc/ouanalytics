@@ -149,13 +149,15 @@ def break_multi_team_tie(
         )
 
     def split(values: list) -> Order | None:
-        """Best value first, both parts re-broken from the start (rule 1c).
-        None when fewer than two distinct known values."""
-        known = {v for v in values if v is not None}
-        if len(known) < 2:
+        """Rank by value, best first; each group still tied re-breaks from the
+        start (rule 1c). None when every team has the same value."""
+        distinct = set(values)
+        if len(distinct) < 2:
             return None
-        best = [t for t, v in zip(remaining, values, strict=True) if v == max(known)]
-        return recurse(best) + recurse([t for t in remaining if t not in best])
+        out: Order = []
+        for v in sorted(distinct, reverse=True):
+            out += recurse([t for t, x in zip(remaining, values, strict=True) if x == v])
+        return out
 
     # (1) division leaders above non-leaders
     leaders = [t for t in remaining if t in division_leaders]

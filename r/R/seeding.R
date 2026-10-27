@@ -206,193 +206,64 @@ break_multi_team_tie <- function(team_abbrs, standings_df, scores_tidy, meta,
   }
   
   remaining <- team_abbrs
-  ordered   <- character(0)
   
-  # Determine conference (all tied teams should be same conference)
-  team_conf <- meta %>%
-    filter(abbreviation == remaining[1]) %>%
-    pull(conference)
-  
-  # --- Criterion 1: Division leader wins over non-leaders ---
-  leaders     <- intersect(remaining, division_leaders)
-  non_leaders <- setdiff(remaining, division_leaders)
-  if (length(leaders) > 0 && length(non_leaders) > 0) {
-    # Leaders get seeded above non-leaders.
-    # If multiple leaders remain tied, continue with them.
-    # Non-leaders continue separately.
-    leader_order <- break_multi_team_tie(
-      leaders, standings_df, scores_tidy, meta,
-      division_leaders, playoff_eligible_own, playoff_eligible_other
-    )
-    non_leader_order <- break_multi_team_tie(
-      non_leaders, standings_df, scores_tidy, meta,
-      division_leaders, playoff_eligible_own, playoff_eligible_other
-    )
-    return(c(leader_order, non_leader_order))
-  }
-  
-  # --- Criterion 2: Record among ALL tied teams ---
-  records <- bind_rows(lapply(remaining, function(tm) {
-    record_vs(tm, remaining, scores_tidy)
-  })) %>%
-      mutate(pct = pct_key(pct))
-  
-  if (n_distinct(records$pct) > 1) {
-    # Some differentiation exists. Assign best team(s) their seed,
-    # then restart with the rest (rule 1c).
-    max_pct <- max(records$pct)
-    best    <- records %>% filter(pct == max_pct) %>% pull(abbreviation)
-    rest    <- setdiff(remaining, best)
-    
-    if (length(best) == 1) {
-      ordered <- c(best, break_multi_team_tie(
-        rest, standings_df, scores_tidy, meta,
-        division_leaders, playoff_eligible_own, playoff_eligible_other
-      ))
-      return(ordered)
-    } else {
-      # Multiple teams still tied at top -- recurse on them separately
-      best_ordered <- break_multi_team_tie(
-        best, standings_df, scores_tidy, meta,
+  # Order the teams by one criterion's values (higher is better). Teams with
+  # different values are ranked by value, and each group still tied restarts the
+  # procedure from the beginning (rule 1c). A criterion with one value for all
+  # the teams does not split them.
+  split_by <- function(values) {
+    if (n_distinct(values) < 2) return(NULL)
+    unlist(lapply(sort(unique(values), decreasing = TRUE), function(v) {
+      break_multi_team_tie(
+        remaining[values == v], standings_df, scores_tidy, meta,
         division_leaders, playoff_eligible_own, playoff_eligible_other
       )
-      rest_ordered <- break_multi_team_tie(
-        rest, standings_df, scores_tidy, meta,
-        division_leaders, playoff_eligible_own, playoff_eligible_other
-      )
-      return(c(best_ordered, rest_ordered))
-    }
+    }))
+  }
+  pcts <- function(opponents) {
+    pct_key(vapply(remaining, function(tm) record_vs(tm, opponents, scores_tidy)$pct,
+                   numeric(1)))
   }
   
-  # --- Criterion 3: Division record (only if ALL teams are in the same division) ---
+  # Criterion 1: division leaders above non-leaders (whatever their divisions)
+  found <- split_by(as.numeric(remaining %in% division_leaders))
+  if (!is.null(found)) return(found)
+  
+  # Criterion 2: record among all the tied teams
+  found <- split_by(pcts(remaining))
+  if (!is.null(found)) return(found)
+  
+  # Criterion 3: division record, only if all the teams are in one division
   team_divs <- meta %>%
     filter(abbreviation %in% remaining) %>%
     pull(division) %>%
     unique()
-  
   if (length(team_divs) == 1) {
-    div_opps <- meta %>%
-      filter(division == team_divs) %>%
-      pull(abbreviation)
-    
-    div_records <- bind_rows(lapply(remaining, function(tm) {
-      record_vs(tm, div_opps, scores_tidy)
-    })) %>%
-      mutate(pct = pct_key(pct))
-    
-    if (n_distinct(div_records$pct) > 1) {
-      max_pct <- max(div_records$pct)
-      best    <- div_records %>% filter(pct == max_pct) %>% pull(abbreviation)
-      rest    <- setdiff(remaining, best)
-      
-      best_ordered <- break_multi_team_tie(
-        best, standings_df, scores_tidy, meta,
-        division_leaders, playoff_eligible_own, playoff_eligible_other
-      )
-      rest_ordered <- break_multi_team_tie(
-        rest, standings_df, scores_tidy, meta,
-        division_leaders, playoff_eligible_own, playoff_eligible_other
-      )
-      return(c(best_ordered, rest_ordered))
-    }
+    found <- split_by(pcts(meta %>% filter(division == team_divs) %>% pull(abbreviation)))
+    if (!is.null(found)) return(found)
   }
   
-  # --- Criterion 4: Conference record ---
-  conf_opps <- meta %>%
-    filter(conference == team_conf) %>%
-    pull(abbreviation)
+  # Criterion 4: conference record
+  team_conf <- meta %>% filter(abbreviation == remaining[1]) %>% pull(conference)
+  found <- split_by(pcts(meta %>% filter(conference == team_conf) %>% pull(abbreviation)))
+  if (!is.null(found)) return(found)
   
-  conf_records <- bind_rows(lapply(remaining, function(tm) {
-    record_vs(tm, conf_opps, scores_tidy)
-  })) %>%
-      mutate(pct = pct_key(pct))
-  
-  if (n_distinct(conf_records$pct) > 1) {
-    max_pct <- max(conf_records$pct)
-    best    <- conf_records %>% filter(pct == max_pct) %>% pull(abbreviation)
-    rest    <- setdiff(remaining, best)
-    
-    best_ordered <- break_multi_team_tie(
-      best, standings_df, scores_tidy, meta,
-      division_leaders, playoff_eligible_own, playoff_eligible_other
-    )
-    rest_ordered <- break_multi_team_tie(
-      rest, standings_df, scores_tidy, meta,
-      division_leaders, playoff_eligible_own, playoff_eligible_other
-    )
-    return(c(best_ordered, rest_ordered))
-  }
-  
-  # --- Criterion 5: Record vs playoff-eligible teams in own conference ---
+  # Criterion 5: record vs playoff-eligible teams in the own conference
   if (!is.null(playoff_eligible_own) && length(playoff_eligible_own) > 0) {
-    po_records <- bind_rows(lapply(remaining, function(tm) {
-      record_vs(tm, playoff_eligible_own, scores_tidy)
-    })) %>%
-      mutate(pct = pct_key(pct))
-    
-    if (n_distinct(po_records$pct) > 1) {
-      max_pct <- max(po_records$pct)
-      best    <- po_records %>% filter(pct == max_pct) %>% pull(abbreviation)
-      rest    <- setdiff(remaining, best)
-      
-      best_ordered <- break_multi_team_tie(
-        best, standings_df, scores_tidy, meta,
-        division_leaders, playoff_eligible_own, playoff_eligible_other
-      )
-      rest_ordered <- break_multi_team_tie(
-        rest, standings_df, scores_tidy, meta,
-        division_leaders, playoff_eligible_own, playoff_eligible_other
-      )
-      return(c(best_ordered, rest_ordered))
-    }
+    found <- split_by(pcts(playoff_eligible_own))
+    if (!is.null(found)) return(found)
   }
   
-  # --- Criterion 6: Record vs playoff-eligible teams in the other conference ---
+  # Criterion 6: record vs playoff-eligible teams in the other conference
   if (!is.null(playoff_eligible_other) && length(playoff_eligible_other) > 0) {
-    po_other_records <- bind_rows(lapply(remaining, function(tm) {
-      record_vs(tm, playoff_eligible_other, scores_tidy)
-    })) %>%
-      mutate(pct = pct_key(pct))
-    
-    if (n_distinct(po_other_records$pct) > 1) {
-      max_pct <- max(po_other_records$pct)
-      best    <- po_other_records %>% filter(pct == max_pct) %>% pull(abbreviation)
-      rest    <- setdiff(remaining, best)
-      
-      best_ordered <- break_multi_team_tie(
-        best, standings_df, scores_tidy, meta,
-        division_leaders, playoff_eligible_other, playoff_eligible_other
-      )
-      rest_ordered <- break_multi_team_tie(
-        rest, standings_df, scores_tidy, meta,
-        division_leaders, playoff_eligible_other, playoff_eligible_other
-      )
-      return(c(best_ordered, rest_ordered))
-    }
+    found <- split_by(pcts(playoff_eligible_other))
+    if (!is.null(found)) return(found)
   }
   
-  # --- Criterion 7: Point differential ---
-  pds <- tibble(
-    abbreviation = remaining,
-    pd = sapply(remaining, function(tm) point_differential(tm, scores_tidy))
-  )
-  
-  if (n_distinct(pds$pd) > 1) {
-    pds <- pds %>% arrange(desc(pd))
-    max_pd <- max(pds$pd)
-    best   <- pds %>% filter(pd == max_pd) %>% pull(abbreviation)
-    rest   <- setdiff(remaining, best)
-    
-    best_ordered <- break_multi_team_tie(
-      best, standings_df, scores_tidy, meta,
-      division_leaders, playoff_eligible_own, playoff_eligible_other
-    )
-    rest_ordered <- break_multi_team_tie(
-      rest, standings_df, scores_tidy, meta,
-      division_leaders, playoff_eligible_own, playoff_eligible_other
-    )
-    return(c(best_ordered, rest_ordered))
-  }
+  # Criterion 7: point differential
+  found <- split_by(vapply(remaining, point_differential, numeric(1),
+                           scores_tidy = scores_tidy))
+  if (!is.null(found)) return(found)
   
   # All criteria exhausted -- alphabetical fallback for random draw
   sort(remaining)

@@ -225,3 +225,12 @@ test_that("multi-team tie: record against playoff teams in the other conference"
   expect_equal(multi(c("C2", "C1", "A1"), sc, playoff_eligible_other = "W1"),
                c("A1", "C1", "C2"))
 })
+
+test_that("multi-team tie: a criterion that separates every team ranks all of them", {
+  # A1 beat A2; C1 played neither. Head-to-head ranks A1 (1-0), A2 (0-1), then
+  # C1 (no games). C1 has the better conference record than A2 (1-0 to 0-1),
+  # but it does not get a second chance once head-to-head has put A2 above it
+  # (nba.com, October 2026: Dallas above the Clippers and Jazz).
+  sc <- bind_rows(sg("A1", "A2", 100, 90), sg("C1", "A4", 100, 90))
+  expect_equal(multi(c("C1", "A2", "A1"), sc), c("A1", "A2", "C1"))
+})

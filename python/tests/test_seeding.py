@@ -122,3 +122,11 @@ def test_multi_team_other_conference_record_before_point_differential():
     st = scores(("AAA", "ZZZ", 100, 90), ("ZZZ", "BBB", 100, 90), ("CCC", "YYY", 200, 50))
     out = break_multi_team_tie(["CCC", "BBB", "AAA"], None, st, META, (), None, ["ZZZ"])
     assert out == ["AAA", "BBB", "CCC"]
+
+
+def test_multi_team_criterion_ranks_every_team_not_just_the_best():
+    # AAA beat BBB; CCC played neither. Head-to-head ranks AAA, BBB, then CCC
+    # (no games), although CCC has the better conference record than BBB
+    # (nba.com, October 2026: Dallas above the Clippers and Jazz).
+    st = scores(("AAA", "BBB", 100, 90), ("CCC", "DDD", 100, 90))
+    assert break_multi_team_tie(["CCC", "BBB", "AAA"], None, st, META) == ["AAA", "BBB", "CCC"]
