@@ -1,6 +1,6 @@
 [project]
 name = "ouanalytics-py"
-version = "0.1.0"
+version = "0.1.1"
 description = "Independent polars re-implementation of the ouanalytics R package, checked against its golden outputs"
 readme = "README.md"
 license = "MIT"

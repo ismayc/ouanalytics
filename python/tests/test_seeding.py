@@ -80,3 +80,24 @@ def test_seed_conference_notes_and_short_conference():
     assert out["seed_note"].to_list() == ["Playoff"] * 4
     # No West teams at all: the other conference has no eligible teams.
     assert out["seed"].to_list() == [1, 2, 3, 4]
+
+
+def test_seed_conference_ranks_more_games_first_among_equal_percentages():
+    # AAA 2-0 and BBB 1-0 are both 1.000, CCC 0-1 and DDD 0-2 both 0.000.
+    # BBB has the far better point differential, but wins minus losses
+    # comes before the tie-breakers: 2-0 above 1-0, and 0-1 above 0-2.
+    standings = pl.DataFrame(
+        {
+            "team_name": ["a", "b", "c", "d"],
+            "conference": ["East"] * 4,
+            "division": ["Atl", "Atl", "Cen", "Cen"],
+            "wins": [1.0, 2, 0, 0],
+            "losses": [0.0, 0, 2, 1],
+            "Winning Pct": [1.0, 1.0, 0.0, 0.0],
+            "Games Back": ["-", "-", "1.0", "1.0"],
+            "abbreviation": ["BBB", "AAA", "DDD", "CCC"],
+        }
+    )
+    st = scores(("AAA", "CCC", 100, 99), ("AAA", "DDD", 100, 99), ("BBB", "DDD", 150, 50))
+    out = seed_conference("East", standings, st, META)
+    assert out["abbreviation"].to_list() == ["AAA", "BBB", "CCC", "DDD"]

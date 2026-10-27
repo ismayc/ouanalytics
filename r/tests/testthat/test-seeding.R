@@ -187,3 +187,17 @@ test_that("compute_playoff_seeding seeds both conferences", {
   expect_equal(out %>% filter(conference == "East") %>% pull(seed), 1:13)
   expect_equal(out %>% filter(conference == "West") %>% pull(seed), 1:6)
 })
+
+test_that("seed_conference ranks wins minus losses before the tie-breakers", {
+  # A1 2-0 and A2 1-0 are both 1.000; A3 0-1 and A4 0-2 are both 0.000.
+  # A2 has the far better point differential, but it does not decide the order.
+  st <- bind_rows(
+    make_standings("A2", 1, "East", "ATL"), make_standings("A1", 1, "East", "ATL"),
+    make_standings("A4", 0, "East", "CEN"), make_standings("A3", 0, "East", "CEN")
+  ) %>%
+    mutate(wins = c(1, 2, 0, 0), losses = c(0, 0, 2, 1))
+  sc <- bind_rows(sg("A1", "A3", 100, 99), sg("A1", "A4", 100, 99),
+                  sg("A2", "A4", 150, 50))
+  out <- seed_conference("East", st, sc, league_meta)
+  expect_equal(out$abbreviation, c("A1", "A2", "A3", "A4"))
+})

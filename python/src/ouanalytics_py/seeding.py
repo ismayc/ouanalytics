@@ -203,7 +203,15 @@ def seed_conference(
     own = _eligible(standings, conf)
     other = _eligible(standings, "West" if conf == "East" else "East")
 
-    groups = conf_standings.group_by("Winning Pct", maintain_order=True).agg("abbreviation")
+    # Wins minus losses ranks first among equal percentages (as on nba.com: 4-0
+    # above 2-0, 0-3 above 0-4); the tie-break procedure splits only teams equal
+    # on both.
+    groups = (
+        conf_standings.with_columns(margin=pl.col("wins") - pl.col("losses"))
+        .group_by("Winning Pct", "margin", maintain_order=True)
+        .agg("abbreviation")
+        .sort(["Winning Pct", "margin"], descending=True, nulls_last=True, maintain_order=True)
+    )
     final_order: list[str] = []
     for teams in groups["abbreviation"].to_list():
         final_order += break_multi_team_tie(

@@ -370,7 +370,7 @@ break_multi_team_tie <- function(team_abbrs, standings_df, scores_tidy, meta,
 #' Playoff seeding
 #'
 #' Seeds one conference, or both, with the official NBA tie-break procedure. Teams
-#' tied on winning percentage are ordered by head-to-head, division leader, division
+#' tied on winning percentage and wins minus losses are ordered by head-to-head, division leader, division
 #' record, conference record, record against playoff-position teams, and point
 #' differential.
 #'
@@ -419,10 +419,16 @@ seed_conference <- function(conf, standings, scores_tidy, meta) {
     pull(abbreviation)
   
   # Step 3: Group teams by Winning Pct and break ties within each group
+  # Early in the season, equal percentages can hold different games played
+  # (4-0 and 2-0, or 0-4 and 0-3). Wins minus losses ranks first, as on nba.com
+  # (4-0 above 2-0, 0-3 above 0-4); the tie-break procedure only splits teams with
+  # the same percentage and margin. After every team has played the same number of
+  # games, this changes nothing.
   pct_groups <- conf_standings %>%
-    group_by(`Winning Pct`) %>%
+    mutate(margin = wins - losses) %>%
+    group_by(`Winning Pct`, margin) %>%
     summarise(teams = list(abbreviation), .groups = "drop") %>%
-    arrange(desc(`Winning Pct`))
+    arrange(desc(`Winning Pct`), desc(margin))
   
   final_order <- character(0)
   
