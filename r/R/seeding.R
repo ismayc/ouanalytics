@@ -103,6 +103,13 @@ get_division_leaders <- function(conf_standings, scores_tidy, meta) {
 # ---------------------------------------------------------------------------
 # Two-team tiebreaker (returns c(winner_abbr, loser_abbr))
 # ---------------------------------------------------------------------------
+# A record with no games ranks below every record that has games, even 0-2.
+# Only early in a season can a tie-break compare a team with no games to one
+# with games; this matches nba.com's order (Washington 0-2 above Indiana, no
+# games, October 2026). Once every team has played every opponent set, it
+# changes nothing.
+pct_key <- function(p) ifelse(is.na(p), -Inf, p)
+
 #' @rdname record_vs
 #' @export
 break_two_team_tie <- function(t1, t2, standings_df, scores_tidy, meta,
@@ -135,8 +142,8 @@ break_two_team_tie <- function(t1, t2, standings_df, scores_tidy, meta,
       pull(abbreviation)
     r1 <- record_vs(t1, div_opps, scores_tidy)
     r2 <- record_vs(t2, div_opps, scores_tidy)
-    if (!is.na(r1$pct) && !is.na(r2$pct) && r1$pct != r2$pct) {
-      return(if (r1$pct > r2$pct) c(t1, t2) else c(t2, t1))
+    if (pct_key(r1$pct) != pct_key(r2$pct)) {
+      return(if (pct_key(r1$pct) > pct_key(r2$pct)) c(t1, t2) else c(t2, t1))
     }
   }
   
@@ -146,16 +153,16 @@ break_two_team_tie <- function(t1, t2, standings_df, scores_tidy, meta,
     pull(abbreviation)
   r1 <- record_vs(t1, conf_opps, scores_tidy)
   r2 <- record_vs(t2, conf_opps, scores_tidy)
-  if (!is.na(r1$pct) && !is.na(r2$pct) && r1$pct != r2$pct) {
-    return(if (r1$pct > r2$pct) c(t1, t2) else c(t2, t1))
+  if (pct_key(r1$pct) != pct_key(r2$pct)) {
+    return(if (pct_key(r1$pct) > pct_key(r2$pct)) c(t1, t2) else c(t2, t1))
   }
   
   # (5) Record vs playoff-eligible teams in own conference
   if (!is.null(playoff_eligible_own) && length(playoff_eligible_own) > 0) {
     r1 <- record_vs(t1, playoff_eligible_own, scores_tidy)
     r2 <- record_vs(t2, playoff_eligible_own, scores_tidy)
-    if (!is.na(r1$pct) && !is.na(r2$pct) && r1$pct != r2$pct) {
-      return(if (r1$pct > r2$pct) c(t1, t2) else c(t2, t1))
+    if (pct_key(r1$pct) != pct_key(r2$pct)) {
+      return(if (pct_key(r1$pct) > pct_key(r2$pct)) c(t1, t2) else c(t2, t1))
     }
   }
   
@@ -163,8 +170,8 @@ break_two_team_tie <- function(t1, t2, standings_df, scores_tidy, meta,
   if (!is.null(playoff_eligible_other) && length(playoff_eligible_other) > 0) {
     r1 <- record_vs(t1, playoff_eligible_other, scores_tidy)
     r2 <- record_vs(t2, playoff_eligible_other, scores_tidy)
-    if (!is.na(r1$pct) && !is.na(r2$pct) && r1$pct != r2$pct) {
-      return(if (r1$pct > r2$pct) c(t1, t2) else c(t2, t1))
+    if (pct_key(r1$pct) != pct_key(r2$pct)) {
+      return(if (pct_key(r1$pct) > pct_key(r2$pct)) c(t1, t2) else c(t2, t1))
     }
   }
   
@@ -227,12 +234,13 @@ break_multi_team_tie <- function(team_abbrs, standings_df, scores_tidy, meta,
   # --- Criterion 2: Record among ALL tied teams ---
   records <- bind_rows(lapply(remaining, function(tm) {
     record_vs(tm, remaining, scores_tidy)
-  }))
+  })) %>%
+      mutate(pct = pct_key(pct))
   
-  if (n_distinct(records$pct, na.rm = TRUE) > 1) {
+  if (n_distinct(records$pct) > 1) {
     # Some differentiation exists. Assign best team(s) their seed,
     # then restart with the rest (rule 1c).
-    max_pct <- max(records$pct, na.rm = TRUE)
+    max_pct <- max(records$pct)
     best    <- records %>% filter(pct == max_pct) %>% pull(abbreviation)
     rest    <- setdiff(remaining, best)
     
@@ -269,10 +277,11 @@ break_multi_team_tie <- function(team_abbrs, standings_df, scores_tidy, meta,
     
     div_records <- bind_rows(lapply(remaining, function(tm) {
       record_vs(tm, div_opps, scores_tidy)
-    }))
+    })) %>%
+      mutate(pct = pct_key(pct))
     
-    if (n_distinct(div_records$pct, na.rm = TRUE) > 1) {
-      max_pct <- max(div_records$pct, na.rm = TRUE)
+    if (n_distinct(div_records$pct) > 1) {
+      max_pct <- max(div_records$pct)
       best    <- div_records %>% filter(pct == max_pct) %>% pull(abbreviation)
       rest    <- setdiff(remaining, best)
       
@@ -295,10 +304,11 @@ break_multi_team_tie <- function(team_abbrs, standings_df, scores_tidy, meta,
   
   conf_records <- bind_rows(lapply(remaining, function(tm) {
     record_vs(tm, conf_opps, scores_tidy)
-  }))
+  })) %>%
+      mutate(pct = pct_key(pct))
   
-  if (n_distinct(conf_records$pct, na.rm = TRUE) > 1) {
-    max_pct <- max(conf_records$pct, na.rm = TRUE)
+  if (n_distinct(conf_records$pct) > 1) {
+    max_pct <- max(conf_records$pct)
     best    <- conf_records %>% filter(pct == max_pct) %>% pull(abbreviation)
     rest    <- setdiff(remaining, best)
     
@@ -317,10 +327,11 @@ break_multi_team_tie <- function(team_abbrs, standings_df, scores_tidy, meta,
   if (!is.null(playoff_eligible_own) && length(playoff_eligible_own) > 0) {
     po_records <- bind_rows(lapply(remaining, function(tm) {
       record_vs(tm, playoff_eligible_own, scores_tidy)
-    }))
+    })) %>%
+      mutate(pct = pct_key(pct))
     
-    if (n_distinct(po_records$pct, na.rm = TRUE) > 1) {
-      max_pct <- max(po_records$pct, na.rm = TRUE)
+    if (n_distinct(po_records$pct) > 1) {
+      max_pct <- max(po_records$pct)
       best    <- po_records %>% filter(pct == max_pct) %>% pull(abbreviation)
       rest    <- setdiff(remaining, best)
       
@@ -336,7 +347,31 @@ break_multi_team_tie <- function(team_abbrs, standings_df, scores_tidy, meta,
     }
   }
   
-  # --- Criterion 6: Point differential ---
+  # --- Criterion 6: Record vs playoff-eligible teams in the other conference ---
+  if (!is.null(playoff_eligible_other) && length(playoff_eligible_other) > 0) {
+    po_other_records <- bind_rows(lapply(remaining, function(tm) {
+      record_vs(tm, playoff_eligible_other, scores_tidy)
+    })) %>%
+      mutate(pct = pct_key(pct))
+    
+    if (n_distinct(po_other_records$pct) > 1) {
+      max_pct <- max(po_other_records$pct)
+      best    <- po_other_records %>% filter(pct == max_pct) %>% pull(abbreviation)
+      rest    <- setdiff(remaining, best)
+      
+      best_ordered <- break_multi_team_tie(
+        best, standings_df, scores_tidy, meta,
+        division_leaders, playoff_eligible_other, playoff_eligible_other
+      )
+      rest_ordered <- break_multi_team_tie(
+        rest, standings_df, scores_tidy, meta,
+        division_leaders, playoff_eligible_other, playoff_eligible_other
+      )
+      return(c(best_ordered, rest_ordered))
+    }
+  }
+  
+  # --- Criterion 7: Point differential ---
   pds <- tibble(
     abbreviation = remaining,
     pd = sapply(remaining, function(tm) point_differential(tm, scores_tidy))
@@ -371,8 +406,8 @@ break_multi_team_tie <- function(team_abbrs, standings_df, scores_tidy, meta,
 #'
 #' Seeds one conference, or both, with the official NBA tie-break procedure. Teams
 #' tied on winning percentage and wins minus losses are ordered by head-to-head, division leader, division
-#' record, conference record, record against playoff-position teams, and point
-#' differential.
+#' record, conference record, record against playoff-position teams in the own and then the other conference,
+#' and point differential.
 #'
 #' @param conf "East" or "West".
 #' @param standings All 30 teams: `team_name`, `conference`, `division`, `wins`,

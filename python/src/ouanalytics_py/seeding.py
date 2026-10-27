@@ -62,6 +62,13 @@ def _by(t1: str, t2: str, v1, v2) -> Order | None:
     return [t1, t2] if v1 > v2 else [t2, t1]
 
 
+def _pct_key(pct: float | None) -> float:
+    """A record with no games ranks below every record that has games, even
+    0-2 (nba.com's order early in a season). No change once every opponent
+    set has been played."""
+    return -math.inf if pct is None else pct
+
+
 def get_division_leaders(
     conf_standings: pl.DataFrame, scores_tidy: pl.DataFrame, meta: pl.DataFrame
 ) -> list[str]:
@@ -106,8 +113,8 @@ def break_two_team_tie(
     # (5), (6) record vs playoff-eligible teams in own, then other conference
     opponent_sets += [s for s in (playoff_eligible_own, playoff_eligible_other) if s]
     for opps in opponent_sets:
-        r1 = record_vs(t1, opps, scores_tidy)["pct"]
-        r2 = record_vs(t2, opps, scores_tidy)["pct"]
+        r1 = _pct_key(record_vs(t1, opps, scores_tidy)["pct"])
+        r2 = _pct_key(record_vs(t2, opps, scores_tidy)["pct"])
         if found := _by(t1, t2, r1, r2):
             return found
     # (7) point differential
@@ -157,7 +164,7 @@ def break_multi_team_tie(
         return recurse(leaders) + recurse(others)
 
     def pcts(opps: Sequence[str]) -> list:
-        return [record_vs(t, opps, scores_tidy)["pct"] for t in remaining]
+        return [_pct_key(record_vs(t, opps, scores_tidy)["pct"]) for t in remaining]
 
     # (2) record among all tied teams
     criteria = [lambda: pcts(remaining)]
@@ -171,7 +178,10 @@ def break_multi_team_tie(
     # (5) record vs playoff-eligible teams in own conference
     if playoff_eligible_own:
         criteria.append(lambda: pcts(playoff_eligible_own))
-    # (6) point differential
+    # (6) record vs playoff-eligible teams in the other conference
+    if playoff_eligible_other:
+        criteria.append(lambda: pcts(playoff_eligible_other))
+    # (7) point differential
     criteria.append(lambda: [point_differential(t, scores_tidy) for t in remaining])
 
     for values in criteria:

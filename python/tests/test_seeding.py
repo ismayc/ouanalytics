@@ -101,3 +101,24 @@ def test_seed_conference_ranks_more_games_first_among_equal_percentages():
     st = scores(("AAA", "CCC", 100, 99), ("AAA", "DDD", 100, 99), ("BBB", "DDD", 150, 50))
     out = seed_conference("East", standings, st, META)
     assert out["abbreviation"].to_list() == ["AAA", "BBB", "CCC", "DDD"]
+
+
+def test_record_with_no_games_ranks_below_zero_and_one():
+    # AAA and BBB tie on conference record (1-1). Against the eligible team
+    # CCC, BBB is 0-1 and AAA has no games: BBB ranks first, although AAA has
+    # the better point differential (nba.com, October 2026: Washington above
+    # Indiana).
+    st = scores(
+        ("AAA", "DDD", 100, 90), ("DDD", "AAA", 100, 90), ("AAA", "ZZZ", 200, 50),
+        ("BBB", "DDD", 100, 90), ("CCC", "BBB", 100, 99),
+    )
+    assert break_two_team_tie("AAA", "BBB", None, st, META, (), ["CCC"]) == ["BBB", "AAA"]
+    assert break_two_team_tie("BBB", "AAA", None, st, META, (), ["CCC"]) == ["BBB", "AAA"]
+
+
+def test_multi_team_other_conference_record_before_point_differential():
+    # No conference games for anyone; CCC has the best point differential
+    # but no game against the eligible team ZZZ. AAA beat ZZZ, BBB lost to it.
+    st = scores(("AAA", "ZZZ", 100, 90), ("ZZZ", "BBB", 100, 90), ("CCC", "YYY", 200, 50))
+    out = break_multi_team_tie(["CCC", "BBB", "AAA"], None, st, META, (), None, ["ZZZ"])
+    assert out == ["AAA", "BBB", "CCC"]

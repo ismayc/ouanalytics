@@ -108,17 +108,21 @@ test_that("multi-team tie: record among all the tied teams, two best teams", {
 
 test_that("multi-team tie: division record when all are in one division", {
   sc <- bind_rows(sg("A1", "A4", 100, 90), sg("A2", "A4", 90, 100))
-  expect_equal(multi(c("A1", "A2", "A3"), sc), c("A1", "A3", "A2"))
+  # A3 has no division games; that ranks below A2's 0-1
+  expect_equal(multi(c("A1", "A2", "A3"), sc), c("A1", "A2", "A3"))
 })
 
 test_that("multi-team tie: conference record across divisions", {
   sc <- bind_rows(sg("A1", "A4", 100, 90), sg("C1", "A4", 90, 100))
-  expect_equal(multi(c("A1", "C1", "C2"), sc), c("A1", "C2", "C1"))
+  # C2 has no conference games; that ranks below C1's 0-1
+  expect_equal(multi(c("A1", "C1", "C2"), sc), c("A1", "C1", "C2"))
 })
 
 test_that("multi-team tie: record against playoff teams in the own conference", {
   sc <- bind_rows(sg("A1", "A4", 100, 90), sg("A1", "A5", 90, 100),
-                  sg("C1", "A4", 90, 100), sg("C1", "A5", 100, 90))
+                  sg("C1", "A4", 90, 100), sg("C1", "A5", 100, 90),
+                  sg("C2", "A5", 100, 90), sg("A3", "C2", 100, 90))
+  # all three are 1-1 in the conference; C2 has no games against A4
   expect_equal(multi(c("A1", "C1", "C2"), sc, playoff_eligible_own = "A4"),
                c("A1", "C1", "C2"))
 })
@@ -200,4 +204,24 @@ test_that("seed_conference ranks wins minus losses before the tie-breakers", {
                   sg("A2", "A4", 150, 50))
   out <- seed_conference("East", st, sc, league_meta)
   expect_equal(out$abbreviation, c("A1", "A2", "A3", "A4"))
+})
+
+test_that("a record with no games ranks below a record with games, even 0-1", {
+  # A1 and A2 tie on conference record (1-1). Against the eligible team C2,
+  # A2 is 0-1 and A1 has no games: A2 ranks first (nba.com, October 2026:
+  # Washington above Indiana). A1 has the better point differential.
+  sc <- bind_rows(sg("A1", "C1", 100, 90), sg("C1", "A1", 100, 90),
+                  sg("A1", "W1", 150, 50),
+                  sg("A2", "C1", 100, 90), sg("C2", "A2", 100, 99))
+  expect_equal(two("A1", "A2", sc, playoff_eligible_own = "C2"), c("A2", "A1"))
+  expect_equal(two("A2", "A1", sc, playoff_eligible_own = "C2"), c("A2", "A1"))
+})
+
+test_that("multi-team tie: record against playoff teams in the other conference", {
+  # No conference games for anyone; C2 has the best point differential but
+  # no game against the eligible West team W1. A1 beat W1, C1 lost to it.
+  sc <- bind_rows(sg("A1", "W1", 100, 90), sg("W1", "C1", 100, 90),
+                  sg("C2", "W2", 200, 50))
+  expect_equal(multi(c("C2", "C1", "A1"), sc, playoff_eligible_other = "W1"),
+               c("A1", "C1", "C2"))
 })

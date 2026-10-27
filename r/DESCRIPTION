@@ -1,6 +1,6 @@
 Package: ouanalytics
 Title: Calculations Behind the NBA Over/Under Pool Page
-Version: 0.1.1
+Version: 0.1.2
 Authors@R: person("Chester", "Ismay", email = "chester.ismay@gmail.com", role = c("aut", "cre"))
 Description: The calculations that score the NBA over/under pool (each
     team's status against its win total, each player's points, the change
